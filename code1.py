@@ -1,5 +1,5 @@
 """
-教师异常行为预测
+DLTI教师技术干扰预测
 架构: 图像(MediaPipe + ST-GCN) + 结构化数据(Embedding + Attention) -> 多模态融合 -> 分类
 """
 import torch
@@ -24,7 +24,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
-# ==================== 1. MediaPipe姿态估计器 ====================
+# ==================== 1. MediaPipe====================
 class MediaPipePoseEstimator:
     """使用MediaPipe进行实时姿态估计"""
 
@@ -86,7 +86,7 @@ class MediaPipePoseEstimator:
 
 # ==================== 2. ST-GCN模型 ====================
 class STGCNBlock(nn.Module):
-    """ST-GCN基础块，包含正则化"""
+    """ST-GCN-基础"""
 
     def __init__(self, in_channels, out_channels, stride=1, residual=True):
         super().__init__()
@@ -125,7 +125,7 @@ class STGCNBlock(nn.Module):
 
 
 class EnhancedSTGCN(nn.Module):
-    """增强的ST-GCN模型，包含更多正则化和优化"""
+    """ST-GCN模型"""
 
     def __init__(self, in_channels=3, num_joints=33, dropout=0.3):
         super().__init__()
@@ -146,7 +146,6 @@ class EnhancedSTGCN(nn.Module):
             STGCNBlock(256, 256)
         ])
 
-        # 全局自适应池化
         self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
 
         # 额外的正则化
@@ -180,7 +179,7 @@ class EnhancedSTGCN(nn.Module):
         return x
 
 
-# ==================== 3. 结构化数据处理模块 ====================
+# ==================== 3. 数据处理 ====================
 class StructuredAttention(nn.Module):
     """双注意力机制处理结构化数据"""
 
@@ -213,13 +212,11 @@ class StructuredAttention(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        # 第一个注意力: 特征级重加权
         residual = x
         x = self.norm1(x)
         weights1 = self.attention1(x)
         x = x * weights1  # 特征重加权
 
-        # 第二个注意力: 通道级注意力
         x = self.norm2(x)
         weights2 = self.attention2(x)
         x = x * weights2
@@ -236,22 +233,18 @@ class StructuredDataProcessor(nn.Module):
     def __init__(self, vocab_size, num_numerical=7, embedding_dim=50, dropout=0.3):
         super().__init__()
 
-        # 文本嵌入层（增加padding_idx处理未知词）
+
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
 
-        # 嵌入层后的标准化
+
         self.embed_norm = nn.LayerNorm(embedding_dim)
 
-        # 数值特征的标准化
-        self.numerical_norm = nn.BatchNorm1d(num_numerical)
 
-        # 合并后的维度
+        self.numerical_norm = nn.BatchNorm1d(num_numerical)
         combined_dim = embedding_dim + num_numerical
 
-        # 双注意力机制
         self.attention = StructuredAttention(combined_dim, dropout=dropout)
 
-        # 特征投影层
         self.projection = nn.Sequential(
             nn.Linear(combined_dim, 256),
             nn.BatchNorm1d(256),
@@ -286,7 +279,7 @@ class StructuredDataProcessor(nn.Module):
         return output
 
 
-# ==================== 4. 完整的多模态融合模型 ====================
+# ==================== 4. 模型 ====================
 class TeacherBehaviorPredictor(nn.Module):
     """完整的教师行为预测模型"""
 
@@ -415,7 +408,7 @@ class TeacherBehaviorDataset(Dataset):
         print(f"标签分布:\n{self.df.iloc[:, -1].value_counts().sort_index()}")
 
     def _collect_image_folders(self):
-        """收集00和11文件夹中的所有图像文件夹"""
+        """收集00有技术干扰-和11无技术干扰文件夹中的所有图像文件夹"""
         self.image_folders = {'00': [], '11': []}
 
         for label_folder in ['00', '11']:
@@ -533,7 +526,7 @@ class TeacherBehaviorDataset(Dataset):
         return len(self.df)
 
 
-# ==================== 6. 训练和验证函数 ====================
+# ==================== 6. 验证函数 ====================
 def train_epoch(model, dataloader, criterion, optimizer, device, epoch):
     """训练一个epoch"""
     model.train()
@@ -616,7 +609,7 @@ def validate(model, dataloader, criterion, device):
     return avg_loss, avg_accuracy, all_predictions, all_labels
 
 
-# ==================== 7. 主训练流程 ====================
+# ==================== 7. 训练 ====================
 def main():
     # ===== 配置参数 =====
     config = {
@@ -696,7 +689,7 @@ def main():
         num_workers=2
     )
 
-    # ===== 初始化模型 =====
+
     print("\n2. 初始化模型...")
     model = TeacherBehaviorPredictor(
         vocab_size=config['vocab_size'],
@@ -806,7 +799,7 @@ def main():
     print("\n✓ 训练完成！模型已保存为 'final_teacher_behavior_model.pth'")
 
 
-# ==================== 8. 推理示例 ====================
+# ==================== 8. 推理 ====================
 def predict_single_sample(model_path, csv_row, image_folder_base):
     """对单个样本进行预测"""
     # 加载模型
@@ -876,8 +869,8 @@ if __name__ == "__main__":
 
     print("\n" + "=" * 60)
     print("使用说明:")
-    print("1. 修改config中的csv_path和image_base_dir为您的数据路径")
-    print("2. 根据实际文本数据调整vocab_size参数")
+    print("1. 修改的csv_path和image_base_dir为数据路径")
+    print("2. 调整vocab_size参数")
     print("3. 模型支持4分类任务（标签0-3）")
     print("4. 训练好的模型可以用于预测新样本")
     print("=" * 60)
